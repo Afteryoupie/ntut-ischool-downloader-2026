@@ -141,7 +141,8 @@ function saveLinkRecord(courseDir, courseName, record) {
     const existing = fs.readFileSync(linkFile, "utf8");
     if (existing.includes(record.url)) return;
   }
-  const entry = prefix + `| ${record.title} | ${record.type} | [點此開啟連結](${record.url}) |\n`;
+  const displayTitle = (record.title.includes("[") || record.title.includes("]")) ? `\`${record.title}\`` : record.title;
+  const entry = prefix + `| ${displayTitle} | ${record.type} | [點此開啟連結](${record.url}) |\n`;
   fs.appendFileSync(linkFile, entry, "utf8");
   console.log(`  ✓ 已將外部連結儲存至 Markdown：${record.title} (${record.type})`);
 }
