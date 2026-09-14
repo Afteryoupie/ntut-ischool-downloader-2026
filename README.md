@@ -21,10 +21,51 @@
 
 ---
 
-## 📋 系統需求
+## 📋 系統需求與環境配置
 
-- **Node.js** >= 20.0.0
-- **Google Chrome** 瀏覽器
+本工具使用現代原生 Node.js 功能（內建 WebSocket 與 Fetch），需使用 **Node.js 20.0.0** 或以上版本。
+
+### 1. 檢查是否已安裝 Node.js
+請在終端機輸入：
+```bash
+node -v
+```
+- 若顯示 `v20.x.x` 或 `v22.x.x` 等 >= 20 的版本號，代表已就緒，可直接跳至下方「快速上手教學」。
+- 若未安裝或版本過低，請參考以下方式安裝：
+
+### 2. 安裝 Node.js (推薦 LTS 穩定版)
+
+#### 🍏 macOS
+- **使用 Homebrew (推薦)**：
+  ```bash
+  brew install node
+  ```
+- **官方安裝檔**：前往 [Node.js 繁體中文官網](https://nodejs.org/zh-tw/) 下載 macOS (`.pkg`) 安裝包雙擊安裝。
+
+#### 🪟 Windows
+- **使用 winget (命令提示字元或 PowerShell)**：
+  ```cmd
+  winget install OpenJS.NodeJS.LTS
+  ```
+- **官方安裝檔**：前往 [Node.js 官方網站](https://nodejs.org/zh-tw/) 下載 Windows (`.msi`) 安裝包安裝。
+
+#### 🐧 Linux (Ubuntu / Debian)
+```bash
+# 使用 NodeSource 安裝最新 LTS 版本
+curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -
+sudo apt-get install -y nodejs
+```
+
+#### 💡 多版本管理 (nvm - 適用 macOS / Linux)
+若您經常在不同專案切換版本，推薦使用 `nvm`：
+```bash
+# 1. 安裝 nvm
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
+
+# 2. 重新開啟終端機後安裝最新 LTS
+nvm install --lts
+nvm use --lts
+```
 
 ---
 
