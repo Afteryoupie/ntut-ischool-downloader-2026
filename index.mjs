@@ -23,22 +23,30 @@ function ask(query) {
   }));
 }
 
+async function getWsUrl() {
+  const res = await fetch(`${CDP_HTTP}/json/list`);
+  const list = await res.json();
+  const target = list.find(t => t.url && (t.url.includes("istudy.ntut.edu.tw/learn/index.php") || t.url.includes("istudy.ntut.edu.tw")));
+  if (!target) throw new Error("找不到 Chrome 中的 iStudy 頁面！");
+  return target.webSocketDebuggerUrl;
+}
+
 class CDPClient {
-  constructor(wsUrl) {
-    this.wsUrl = wsUrl;
-    this.ws = new WebSocket(wsUrl);
+  constructor() {
+    this.ws = null;
     this.pending = new Map();
     this.idCounter = 1;
     this.pingInterval = null;
   }
 
   async connect() {
-    if (this.ws.readyState !== WebSocket.OPEN) {
-      await new Promise((resolve, reject) => {
-        this.ws.onopen = resolve;
-        this.ws.onerror = reject;
-      });
-    }
+    const wsUrl = await getWsUrl();
+    this.ws = new WebSocket(wsUrl);
+
+    await new Promise((resolve, reject) => {
+      this.ws.onopen = resolve;
+      this.ws.onerror = reject;
+    });
 
     this.ws.onmessage = (e) => {
       const msg = JSON.parse(e.data);
@@ -50,41 +58,66 @@ class CDPClient {
       }
     };
 
-    this.ws.onclose = (e) => {
+    this.ws.onclose = () => {
       if (this.pingInterval) clearInterval(this.pingInterval);
       for (const [id, { reject }] of this.pending) {
-        reject(new Error(`WebSocket 連線已中斷 (code: ${e.code})`));
+        reject(new Error(`WebSocket 連線已斷開`));
       }
       this.pending.clear();
+      this.ws = null;
     };
 
+    if (this.pingInterval) clearInterval(this.pingInterval);
     this.pingInterval = setInterval(() => {
-      if (this.ws.readyState === WebSocket.OPEN) {
+      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
         this.send("Browser.getVersion").catch(() => {});
       }
     }, 5000);
   }
 
-  send(method, params = {}) {
+  async ensureConnected() {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      await this.connect();
+    }
+  }
+
+  async send(method, params = {}) {
+    await this.ensureConnected();
     return new Promise((resolve, reject) => {
       const id = this.idCounter++;
       this.pending.set(id, { resolve, reject });
-      this.ws.send(JSON.stringify({ id, method, params }));
+      try {
+        this.ws.send(JSON.stringify({ id, method, params }));
+      } catch (err) {
+        this.pending.delete(id);
+        reject(err);
+      }
     });
   }
 
   async evaluate(expression, awaitPromise = false) {
-    const res = await this.send("Runtime.evaluate", {
-      expression,
-      awaitPromise,
-      returnByValue: true
-    });
-    return res.result?.value;
+    try {
+      const res = await this.send("Runtime.evaluate", {
+        expression,
+        awaitPromise,
+        returnByValue: true
+      });
+      return res.result?.value;
+    } catch (err) {
+      // 嘗試重新連線後再試一次
+      await this.connect().catch(() => {});
+      const res = await this.send("Runtime.evaluate", {
+        expression,
+        awaitPromise,
+        returnByValue: true
+      });
+      return res.result?.value;
+    }
   }
 
   close() {
     if (this.pingInterval) clearInterval(this.pingInterval);
-    this.ws.close();
+    if (this.ws) this.ws.close();
   }
 }
 
@@ -151,29 +184,48 @@ async function processCourse(client, course) {
   const courseDir = path.join(WORKSPACE_DIR, "downloads", sanitizeFilename(course.name));
   fs.mkdirSync(courseDir, { recursive: true });
 
-  // 1. 切換課程
+  // 1. 送出切換課程指令
   await client.evaluate(`window.chgCourse("${course.id}", 1, 1);`);
   console.log(`已送出切換課程指令 (ID: ${course.id})...`);
-  await sleep(3000);
+  await sleep(2000);
 
-  // 2. 點擊「教材及錄影」
-  await client.evaluate(`(() => {
-    try {
-      const sys = window.frames["mooc_sysbar"];
-      const matLink = Array.from(sys.document.querySelectorAll("a")).find(a => a.innerText.includes("教材及錄影"));
-      if (matLink) matLink.click();
-    } catch(e) {}
-  })()`);
-  console.log(`已進入「教材及錄影」，等候教材目錄載入...`);
+  // 2. 輪詢直到 mooc_sysbar 載入完成並點擊「教材及錄影」
+  let clickedMat = false;
+  for (let i = 0; i < 20; i++) {
+    clickedMat = await client.evaluate(`(() => {
+      try {
+        const sys = window.frames["mooc_sysbar"];
+        if (!sys || !sys.document) return false;
+        const matLink = Array.from(sys.document.querySelectorAll("a")).find(a => a.innerText.includes("教材及錄影"));
+        if (matLink) {
+          matLink.click();
+          return true;
+        }
+      } catch(e) {}
+      return false;
+    })()`);
+    if (clickedMat) break;
+    await sleep(1000);
+  }
 
-  // 3. 等候 pathtree 載入
+  if (clickedMat) {
+    console.log(`已進入「教材及錄影」，等候教材目錄載入...`);
+  } else {
+    console.log(`正在檢查教材目錄...`);
+  }
+
+  // 3. 等候 pathtree 與 xmlDoc 載入
   let treeReady = false;
   for (let i = 0; i < 20; i++) {
     await sleep(1000);
     treeReady = await client.evaluate(`(() => {
-      const cat = window.frames["s_catalog"];
-      const tree = cat ? (cat.frames["pathtree"] || cat.document.getElementById("pathtree")?.contentWindow) : null;
-      return !!(tree && tree.xmlDoc);
+      try {
+        const cat = window.frames["s_catalog"];
+        const tree = cat ? (cat.frames["pathtree"] || cat.document.getElementById("pathtree")?.contentWindow) : null;
+        return !!(tree && tree.xmlDoc);
+      } catch(e) {
+        return false;
+      }
     })()`);
     if (treeReady) break;
   }
@@ -185,19 +237,23 @@ async function processCourse(client, course) {
 
   // 4. 解析 XML 教材清單
   const items = await client.evaluate(`(() => {
-    const cat = window.frames["s_catalog"];
-    const tree = cat.frames["pathtree"] || cat.document.getElementById("pathtree")?.contentWindow;
-    if (!tree || !tree.xmlDoc) return [];
-    return Array.from(tree.xmlDoc.getElementsByTagName("item")).map(it => {
-      const ref = it.getAttribute("identifierref");
-      const res = ref ? tree.xmlDoc.querySelector(\`resource[identifier="\${ref}"]\`) : null;
-      return {
-        id: it.getAttribute("identifier"),
-        title: tree.getTitle(it).replace(/(<[^>]*>|^\\s+|\\s+$)/g, ""),
-        ref: ref,
-        href: res ? res.getAttribute("href") : null
-      };
-    });
+    try {
+      const cat = window.frames["s_catalog"];
+      const tree = cat ? (cat.frames["pathtree"] || cat.document.getElementById("pathtree")?.contentWindow) : null;
+      if (!tree || !tree.xmlDoc) return [];
+      return Array.from(tree.xmlDoc.getElementsByTagName("item")).map(it => {
+        const ref = it.getAttribute("identifierref");
+        const res = ref ? tree.xmlDoc.querySelector(\`resource[identifier="\${ref}"]\`) : null;
+        return {
+          id: it.getAttribute("identifier"),
+          title: tree.getTitle(it).replace(/(<[^>]*>|^\\s+|\\s+$)/g, ""),
+          ref: ref,
+          href: res ? res.getAttribute("href") : null
+        };
+      });
+    } catch(e) {
+      return [];
+    }
   })()`);
 
   console.log(`共偵測到 ${items.length} 個單元項目：`);
@@ -227,7 +283,7 @@ async function processCourse(client, course) {
         }
       }
 
-      // 重置 s_main 的 DEFAULT_URL 避免抓取到上一份檔案
+      // 重置 s_main 的 DEFAULT_URL
       await client.evaluate(`(() => {
         try {
           const sm = window.frames["s_main"];
@@ -237,10 +293,12 @@ async function processCourse(client, course) {
 
       // 觸發節點載入
       await client.evaluate(`(() => {
-        const cat = window.frames["s_catalog"];
-        const tree = cat.frames["pathtree"] || cat.document.getElementById("pathtree")?.contentWindow;
-        const el = tree.document.getElementById("${item.id}") || Array.from(tree.document.querySelectorAll("a")).find(a => a.innerText.includes(${JSON.stringify(item.title)}));
-        tree.launchActivity(el, "${item.id}", "s_main");
+        try {
+          const cat = window.frames["s_catalog"];
+          const tree = cat ? (cat.frames["pathtree"] || cat.document.getElementById("pathtree")?.contentWindow) : null;
+          const el = tree.document.getElementById("${item.id}") || Array.from(tree.document.querySelectorAll("a")).find(a => a.innerText.includes(${JSON.stringify(item.title)}));
+          tree.launchActivity(el, "${item.id}", "s_main");
+        } catch(e) {}
       })()`);
 
       if (isVideoItem) {
@@ -292,14 +350,15 @@ async function processCourse(client, course) {
         }
 
         // 檢查新分頁
-        const resList = await fetch(`${CDP_HTTP}/json/list`);
-        const tabs = await resList.json();
-        const blankTab = tabs.find(t => t.url && !t.url.includes("istudy.ntut.edu.tw") && !t.url.includes("nportal.ntut.edu.tw") && !t.url.startsWith("chrome"));
-        if (blankTab) {
-          externalLink = blankTab.url;
-          try { await fetch(`${CDP_HTTP}/json/close/${blankTab.id}`); } catch (e) {}
-          break;
-        }
+        try {
+          const resList = await fetch(`${CDP_HTTP}/json/list`);
+          const tabs = await resList.json();
+          const blankTab = tabs.find(t => t.url && !t.url.includes("istudy.ntut.edu.tw") && !t.url.includes("nportal.ntut.edu.tw") && !t.url.startsWith("chrome"));
+          if (blankTab) {
+            externalLink = blankTab.url;
+            break;
+          }
+        } catch (e) {}
       }
 
       if (pdfUrl) {
@@ -317,9 +376,7 @@ async function processCourse(client, course) {
             const a = sm.document.createElement("a");
             a.href = url;
             a.download = ${JSON.stringify(dlFilename)};
-            sm.document.body.appendChild(a);
             a.click();
-            a.remove();
             return { success: true, size: blob.size };
           } catch(err) {
             return { error: err.message };
@@ -395,10 +452,9 @@ async function main() {
     process.exit(1);
   }
 
-  const wsUrl = status.target.webSocketDebuggerUrl;
-  console.log(`✓ 成功連接 Chrome 偵錯工作階段：${status.target.title}`);
-  const client = new CDPClient(wsUrl);
+  const client = new CDPClient();
   await client.connect();
+  console.log(`✓ 成功連接 Chrome 偵錯工作階段：${status.target.title}`);
 
   console.log(`正在偵測您的帳號課程清單...`);
   const courses = await getAvailableCourses(client);
