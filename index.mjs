@@ -104,7 +104,6 @@ class CDPClient {
       });
       return res.result?.value;
     } catch (err) {
-      // 嘗試重新連線後再試一次
       await this.connect().catch(() => {});
       const res = await this.send("Runtime.evaluate", {
         expression,
@@ -123,6 +122,22 @@ class CDPClient {
 
 function sanitizeFilename(name) {
   return name.replace(/[/\\?%*:|"<>]/g, "_").trim();
+}
+
+function saveLinkRecord(courseDir, courseName, record) {
+  const linkFile = path.join(courseDir, "課程外部資源與錄影連結.md");
+  let prefix = "";
+  if (!fs.existsSync(linkFile)) {
+    prefix = `# ${courseName} - 課程外部資源與錄影連結\n\n`;
+    prefix += `擷取時間：${new Date().toLocaleString()}\n\n`;
+    prefix += `| 項目名稱 | 類型 | 連結網址 |\n| :--- | :--- | :--- |\n`;
+  } else {
+    const existing = fs.readFileSync(linkFile, "utf8");
+    if (existing.includes(record.url)) return;
+  }
+  const entry = prefix + `| ${record.title} | ${record.type} | [點此開啟連結](${record.url}) |\n`;
+  fs.appendFileSync(linkFile, entry, "utf8");
+  console.log(`  ✓ 已將外部連結儲存至 Markdown：${record.title} (${record.type})`);
 }
 
 async function waitForDownloadedFile(filename, initialMtime = 0, timeoutMs = 90000) {
@@ -184,14 +199,17 @@ async function processCourse(client, course) {
   const courseDir = path.join(WORKSPACE_DIR, "downloads", sanitizeFilename(course.name));
   fs.mkdirSync(courseDir, { recursive: true });
 
-  // 1. 送出切換課程指令
-  await client.evaluate(`window.chgCourse("${course.id}", 1, 1);`);
-  console.log(`已送出切換課程指令 (ID: ${course.id})...`);
-  await sleep(2000);
+  // 1. 重置 catalog 並切換課程
+  await client.evaluate(`(() => {
+    try { window.frames["s_catalog"].location.href = "about:blank"; } catch(e) {}
+    window.chgCourse("${course.id}", 1, 1);
+  })()`);
+  console.log(`已切換至課程 ID: ${course.id}...`);
 
   // 2. 輪詢直到 mooc_sysbar 載入完成並點擊「教材及錄影」
   let clickedMat = false;
   for (let i = 0; i < 20; i++) {
+    await sleep(1000);
     clickedMat = await client.evaluate(`(() => {
       try {
         const sys = window.frames["mooc_sysbar"];
@@ -205,23 +223,21 @@ async function processCourse(client, course) {
       return false;
     })()`);
     if (clickedMat) break;
-    await sleep(1000);
   }
 
   if (clickedMat) {
     console.log(`已進入「教材及錄影」，等候教材目錄載入...`);
-  } else {
-    console.log(`正在檢查教材目錄...`);
   }
 
-  // 3. 等候 pathtree 與 xmlDoc 載入
+  // 3. 等候 pathtree 與 xmlDoc 載入完成
   let treeReady = false;
-  for (let i = 0; i < 20; i++) {
+  for (let i = 0; i < 25; i++) {
     await sleep(1000);
     treeReady = await client.evaluate(`(() => {
       try {
         const cat = window.frames["s_catalog"];
-        const tree = cat ? (cat.frames["pathtree"] || cat.document.getElementById("pathtree")?.contentWindow) : null;
+        if (!cat || !cat.location.href.includes("manifest.php")) return false;
+        const tree = cat.frames["pathtree"] || cat.document.getElementById("pathtree")?.contentWindow;
         return !!(tree && tree.xmlDoc);
       } catch(e) {
         return false;
@@ -248,7 +264,8 @@ async function processCourse(client, course) {
           id: it.getAttribute("identifier"),
           title: tree.getTitle(it).replace(/(<[^>]*>|^\\s+|\\s+$)/g, ""),
           ref: ref,
-          href: res ? res.getAttribute("href") : null
+          href: res ? res.getAttribute("href") : null,
+          target: it.getAttribute("target")
         };
       });
     } catch(e) {
@@ -263,8 +280,6 @@ async function processCourse(client, course) {
     console.log(`[提示] 此課程目錄無任何單元。`);
     return;
   }
-
-  const linkRecords = [];
 
   for (let idx = 0; idx < items.length; idx++) {
     const item = items[idx];
@@ -308,8 +323,7 @@ async function processCourse(client, course) {
         const videoUrl = smFrame?.frame?.url;
 
         if (videoUrl && videoUrl !== "about:blank") {
-          console.log(`  ✓ 取得線上錄影串流網址：${videoUrl.slice(0, 75)}...`);
-          linkRecords.push({ title: item.title, url: videoUrl, type: "線上錄影" });
+          saveLinkRecord(courseDir, course.name, { title: item.title, url: videoUrl, type: "線上錄影" });
         } else {
           console.log(`  [提示] 未能取得錄影網址。`);
         }
@@ -319,6 +333,7 @@ async function processCourse(client, course) {
       // 輪詢 s_main 取得 PDF 或外部連結
       let pdfUrl = null;
       let externalLink = null;
+      let externalType = "外部教材連結";
 
       for (let w = 0; w < 12; w++) {
         await sleep(1000);
@@ -349,13 +364,18 @@ async function processCourse(client, course) {
           }
         }
 
-        // 檢查新分頁
+        // 檢查是否有新分頁 (例如 Dropbox / Google Drive 等 target=_blank)
         try {
           const resList = await fetch(`${CDP_HTTP}/json/list`);
           const tabs = await resList.json();
           const blankTab = tabs.find(t => t.url && !t.url.includes("istudy.ntut.edu.tw") && !t.url.includes("nportal.ntut.edu.tw") && !t.url.startsWith("chrome"));
           if (blankTab) {
             externalLink = blankTab.url;
+            if (externalLink.includes("dropbox.com")) externalType = "Dropbox 雲端教材";
+            else if (externalLink.includes("drive.google.com")) externalType = "Google Drive 雲端教材";
+            else if (externalLink.includes("onedrive") || externalLink.includes("sharepoint")) externalType = "OneDrive 雲端教材";
+            // 關閉外部彈出的分頁
+            try { await fetch(`${CDP_HTTP}/json/close/${blankTab.id}`); } catch (e) {}
             break;
           }
         } catch (e) {}
@@ -398,15 +418,19 @@ async function processCourse(client, course) {
           console.log(`  ⚠️ 下載超時或未在下載夾找到檔案。`);
         }
       } else if (externalLink) {
-        console.log(`  發現外部教材連結：${externalLink}`);
-        linkRecords.push({ title: item.title, url: externalLink, type: "外部教材連結" });
+        if (externalLink.includes("dropbox.com")) externalType = "Dropbox 雲端教材";
+        else if (externalLink.includes("drive.google.com")) externalType = "Google Drive 雲端教材";
+        saveLinkRecord(courseDir, course.name, { title: item.title, url: externalLink, type: externalType });
       } else {
         const frameTree = await client.send("Page.getFrameTree");
         const smFrame = frameTree.frameTree.childFrames?.find(f => f.frame.name === "s_main");
         const url = smFrame?.frame?.url;
         if (url && url !== "about:blank" && !url.includes("SCORM_fetchResource.php")) {
-          console.log(`  發現外部嵌入頁面：${url.slice(0, 80)}...`);
-          linkRecords.push({ title: item.title, url, type: "外部嵌入資源" });
+          let type = "外部嵌入資源";
+          if (url.includes("dropbox.com")) type = "Dropbox 雲端教材";
+          else if (url.includes("drive.google.com")) type = "Google Drive 雲端教材";
+          else if (url.includes("istream") || url.includes("video")) type = "線上錄影";
+          saveLinkRecord(courseDir, course.name, { title: item.title, url, type });
         } else {
           console.log(`  [提示] 此單元無可下載實體檔案。`);
         }
@@ -414,18 +438,6 @@ async function processCourse(client, course) {
     } catch (itemErr) {
       console.error(`  ⚠️ 處理此項目時發生錯誤：${itemErr.message}`);
     }
-  }
-
-  if (linkRecords.length > 0) {
-    const linkFile = path.join(courseDir, "課程外部資源與錄影連結.md");
-    let content = `# ${course.name} - 課程外部資源與錄影連結\n\n`;
-    content += `擷取時間：${new Date().toLocaleString()}\n\n`;
-    content += `| 項目名稱 | 類型 | 連結網址 |\n| :--- | :--- | :--- |\n`;
-    for (const rec of linkRecords) {
-      content += `| ${rec.title} | ${rec.type} | [點此開啟連結](${rec.url}) |\n`;
-    }
-    fs.writeFileSync(linkFile, content, "utf8");
-    console.log(`\n✓ 已整理並儲存外部資源/錄影清單至：${linkFile}`);
   }
 }
 
