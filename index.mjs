@@ -24,11 +24,16 @@ function ask(query) {
 }
 
 async function getWsUrl() {
-  const res = await fetch(`${CDP_HTTP}/json/list`);
-  const list = await res.json();
-  const target = list.find(t => t.url && (t.url.includes("istudy.ntut.edu.tw/learn/index.php") || t.url.includes("istudy.ntut.edu.tw")));
-  if (!target) throw new Error("找不到 Chrome 中的 iStudy 頁面！");
-  return target.webSocketDebuggerUrl;
+  for (let retry = 0; retry < 6; retry++) {
+    try {
+      const res = await fetch(`${CDP_HTTP}/json/list`);
+      const list = await res.json();
+      const target = list.find(t => t.type === "page" && t.url && t.url.includes("istudy.ntut.edu.tw"));
+      if (target && target.webSocketDebuggerUrl) return target.webSocketDebuggerUrl;
+    } catch (e) {}
+    await sleep(600);
+  }
+  throw new Error("找不到 Chrome 中的 iStudy 頁面！請確認瀏覽器仍在該分頁。");
 }
 
 class CDPClient {
@@ -104,6 +109,7 @@ class CDPClient {
       });
       return res.result?.value;
     } catch (err) {
+      await sleep(500);
       await this.connect().catch(() => {});
       const res = await this.send("Runtime.evaluate", {
         expression,
@@ -169,7 +175,7 @@ async function checkChromeConnection() {
   try {
     const res = await fetch(`${CDP_HTTP}/json/list`);
     const list = await res.json();
-    const target = list.find(t => t.url && (t.url.includes("istudy.ntut.edu.tw") || t.url.includes("nportal.ntut.edu.tw")));
+    const target = list.find(t => t.type === "page" && t.url && (t.url.includes("istudy.ntut.edu.tw") || t.url.includes("nportal.ntut.edu.tw")));
     return { ok: true, target, list };
   } catch (err) {
     return { ok: false, error: err.message };
@@ -205,6 +211,7 @@ async function processCourse(client, course) {
     window.chgCourse("${course.id}", 1, 1);
   })()`);
   console.log(`已切換至課程 ID: ${course.id}...`);
+  await sleep(1500);
 
   // 2. 輪詢直到 mooc_sysbar 載入完成並點擊「教材及錄影」
   let clickedMat = false;
@@ -368,14 +375,12 @@ async function processCourse(client, course) {
         try {
           const resList = await fetch(`${CDP_HTTP}/json/list`);
           const tabs = await resList.json();
-          const blankTab = tabs.find(t => t.url && !t.url.includes("istudy.ntut.edu.tw") && !t.url.includes("nportal.ntut.edu.tw") && !t.url.startsWith("chrome"));
+          const blankTab = tabs.find(t => t.type === "page" && t.url && !t.url.includes("istudy.ntut.edu.tw") && !t.url.includes("nportal.ntut.edu.tw") && !t.url.startsWith("chrome"));
           if (blankTab) {
             externalLink = blankTab.url;
             if (externalLink.includes("dropbox.com")) externalType = "Dropbox 雲端教材";
             else if (externalLink.includes("drive.google.com")) externalType = "Google Drive 雲端教材";
             else if (externalLink.includes("onedrive") || externalLink.includes("sharepoint")) externalType = "OneDrive 雲端教材";
-            // 關閉外部彈出的分頁
-            try { await fetch(`${CDP_HTTP}/json/close/${blankTab.id}`); } catch (e) {}
             break;
           }
         } catch (e) {}
