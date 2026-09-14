@@ -1,0 +1,18 @@
+# 敏感資料與下載教材 (避免上傳教授版權教材及個人修課資料)
+downloads/
+download/
+*.pdf
+*.zip
+*.pptx
+*.ppt
+*.docx
+*.doc
+
+# 系統與日誌
+.DS_Store
+*.log
+.venv/
+node_modules/
+
+# 個人設定或臨時測試檔
+download_service.mjs

@@ -1,0 +1,27 @@
+{
+  "name": "ntut-istudy-downloader",
+  "version": "1.0.0",
+  "description": "國立臺北科技大學 (NTUT) 數位學園 iStudy 課程教材與錄影資源自動化下載工具",
+  "main": "index.mjs",
+  "type": "module",
+  "bin": {
+    "ntut-istudy": "./index.mjs"
+  },
+  "scripts": {
+    "start": "node index.mjs"
+  },
+  "keywords": [
+    "ntut",
+    "istudy",
+    "downloader",
+    "crawler",
+    "cdp",
+    "chrome-devtools-protocol",
+    "automation"
+  ],
+  "author": "linjiade",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
