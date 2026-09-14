@@ -122,6 +122,26 @@ npm start
 
 ---
 
+## 🤖 AI Agent 自動化執行指南 (For Coding Agents & LLMs)
+
+本專案支援全自動、免互動（Non-Interactive）的 CLI 命令，特別適合 **Antigravity、Cursor、Claude Code、Aider、GitHub Copilot** 等 AI 程式助理直接調用。
+
+詳細的 Agent 系統指令與自動化流程請參考專屬規範文件：👉 [AGENTS.md](AGENTS.md)
+
+### 快速非互動指令：
+```bash
+# 自動下載全部已修課程
+node index.mjs --all
+
+# 下載指定編號課程 (例如第 1 與第 2 門課)
+node index.mjs -c 1,2
+
+# 透過環境變數傳遞
+COURSES=all node index.mjs
+```
+
+---
+
 ## 📁 下載目錄結構說明
 
 下載完成後，所有檔案將按課程名稱分類存放於 `./downloads/` 目錄：

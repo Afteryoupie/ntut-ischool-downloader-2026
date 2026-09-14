@@ -485,9 +485,25 @@ async function main() {
 
   console.log(`\n偵測到您目前修讀的課程清單：`);
   courses.forEach((c, i) => console.log(`  [${i + 1}] ${c.name}`));
-  console.log(`  [A] 全部下載 (All)`);
+  const args = process.argv.slice(2);
+  let choice = "";
+  if (args.includes("--all") || args.includes("-a")) {
+    choice = "A";
+    console.log(`\n[參數模式] 自動選取全部課程 (--all)`);
+  } else {
+    const cIdx = args.findIndex(a => a === "--courses" || a === "-c");
+    if (cIdx !== -1 && args[cIdx + 1]) {
+      choice = args[cIdx + 1];
+      console.log(`\n[參數模式] 自動選取指定課程: ${choice}`);
+    } else if (process.env.COURSES) {
+      choice = process.env.COURSES;
+      console.log(`\n[環境變數] 自動選取課程: ${choice}`);
+    }
+  }
 
-  const choice = await ask(`\n請輸入欲下載的課程編號 (例如: 1 或 1,2,3 或 A 全部): `);
+  if (!choice) {
+    choice = await ask(`\n請輸入欲下載的課程編號 (例如: 1 或 1,2,3 或 A 全部): `);
+  }
 
   let selectedCourses = [];
   if (choice.toLowerCase() === "a" || choice.toLowerCase() === "all") {
