@@ -161,39 +161,6 @@ downloads/
 
 > **注意**：專案 `.gitignore` 預設已將 `downloads/` 排除，避免個人修課檔案或教授版權教材誤傳至公開版本庫。
 
----
-
-## 🛠️ 開源推送到 GitHub 操作步驟
-
-若您想將此工具開源到自己的 GitHub 帳號，請依照以下步驟操作：
-
-1. **前往 GitHub 建立新儲存庫**：
-   - 瀏覽 [https://github.com/new](https://github.com/new)
-   - 輸入 Repository 名稱（例如：`ntut-istudy-downloader`）
-   - 建議選擇 **Public**
-   - 不要勾選 *Initialize with README*（因為本機已建立）
-   - 點擊 **Create repository**
-
-2. **在終端機將本機目錄初始化並推送到 GitHub**：
-   ```bash
-   # 1. 初始化 Git 版本庫
-   git init
-
-   # 2. 將專案原始碼加入暫存區
-   git add .
-
-   # 3. 提交第一個 Commit
-   git commit -m "feat: initial commit of NTUT iStudy downloader"
-
-   # 4. 建立 main 分支
-   git branch -M main
-
-   # 5. 關聯到您的 GitHub 儲存庫 (請將 YOUR_USERNAME 換成您的 GitHub 帳號)
-   git remote add origin https://github.com/YOUR_USERNAME/ntut-istudy-downloader.git
-
-   # 6. 推送至 GitHub
-   git push -u origin main
-   ```
 
 ---
 
