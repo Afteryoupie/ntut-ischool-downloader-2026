@@ -70,18 +70,18 @@ Agents should **NEVER** use interactive prompts. Use explicit CLI flags:
 
 #### Option A: Download All Enrolled Courses (`--all` or `-a`)
 ```bash
-node index.mjs --all
+node codes/index.mjs --all
 ```
 
 #### Option B: Download Specific Courses by Index (`--courses` or `-c`)
 ```bash
 # Downloads courses #1 and #2 from the detected course menu
-node index.mjs -c 1,2
+node codes/index.mjs -c 1,2
 ```
 
 #### Option C: Pass via Environment Variable
 ```bash
-COURSES=all node index.mjs
+COURSES=all node codes/index.mjs
 ```
 
 ---

@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Node.js Version](https://img.shields.io/badge/node-%3E%3D20.0.0-brightgreen.svg)](https://nodejs.org)
-[![Zero Dependencies](https://img.shields.io/badge/dependencies-0-success.svg)](package.json)
+[![Zero Dependencies](https://img.shields.io/badge/dependencies-0-success.svg)](codes/package.json)
 
 專為**國立臺北科技大學 (NTUT)** 學生設計的 [iStudy 數位學園](https://istudy.ntut.edu.tw) 課程講義與線上錄影自動化下載/彙整工具。
 
@@ -103,8 +103,9 @@ google-chrome --remote-debugging-port=9222 --user-data-dir="$HOME/.config/chrome
 回到終端機專案目錄，執行：
 
 ```bash
-npm start
-# 或是直接執行：node index.mjs
+node codes/index.mjs
+# 或是切換至 codes 目錄執行 npm start：
+# cd codes && npm start
 ```
 
 程式將自動列出您本學期或歷年所有已修讀的課程名稱，例如：
@@ -131,13 +132,13 @@ npm start
 ### 快速非互動指令：
 ```bash
 # 自動下載全部已修課程
-node index.mjs --all
+node codes/index.mjs --all
 
 # 下載指定編號課程 (例如第 1 與第 2 門課)
-node index.mjs -c 1,2
+node codes/index.mjs -c 1,2
 
 # 透過環境變數傳遞
-COURSES=all node index.mjs
+COURSES=all node codes/index.mjs
 ```
 
 ---

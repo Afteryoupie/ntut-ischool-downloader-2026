@@ -2,9 +2,17 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 
+import { fileURLToPath } from "node:url";
+ 
 const CDP_HTTP = "http://127.0.0.1:9222";
 const DOWNLOADS_DIR = path.join(os.homedir(), "Downloads");
-const WORKSPACE_DIR = process.cwd();
+const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = path.resolve(SCRIPT_DIR, "..");
+const WORKSPACE_DIR = process.env.OUTPUT_DIR || (
+  fs.existsSync(path.join(process.cwd(), "downloads"))
+    ? process.cwd()
+    : (fs.existsSync(path.join(REPO_ROOT, "downloads")) ? REPO_ROOT : process.cwd())
+);
 
 const TARGET_COURSES = [
   { id: "10103036", name: "1151_材料科學與工程特論_366167" },

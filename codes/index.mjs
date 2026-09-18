@@ -4,9 +4,17 @@ import path from "node:path";
 import os from "node:os";
 import readline from "node:readline";
 
+import { fileURLToPath } from "node:url";
+
 const CDP_HTTP = process.env.CDP_HTTP || "http://127.0.0.1:9222";
 const DOWNLOADS_DIR = path.join(os.homedir(), "Downloads");
-const WORKSPACE_DIR = process.cwd();
+const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = path.resolve(SCRIPT_DIR, "..");
+const WORKSPACE_DIR = process.env.OUTPUT_DIR || (
+  fs.existsSync(path.join(process.cwd(), "downloads"))
+    ? process.cwd()
+    : (fs.existsSync(path.join(REPO_ROOT, "downloads")) ? REPO_ROOT : process.cwd())
+);
 
 function sleep(ms) {
   return new Promise(r => setTimeout(r, ms));
