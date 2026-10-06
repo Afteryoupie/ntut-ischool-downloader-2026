@@ -74,11 +74,12 @@ NaOH-3A-10hr,NaOH-3A-S01,10hr,3,,,,,,,,,
 NaOH-3A-12hr,NaOH-3A-S01,12hr,3,,,,,,,,,
 NaOH-3A-1day,NaOH-3A-S01,1day,3,,,,,,,,,
 NaOH-3A-2day,NaOH-3A-S01,2day,3,,,,,,,,,
-NaOH-5A-0min,NaOH-5A-S01,0min,0,,0,,,100.00,0.00,,,初始原液清澈無色
-NaOH-5A-10min,NaOH-5A-S01,10min,5,,,,,,,,,
-NaOH-5A-20min,NaOH-5A-S01,20min,5,,,,,,,,,
-NaOH-5A-30min,NaOH-5A-S01,30min,5,,,,,,,,,
-NaOH-5A-1hr,NaOH-5A-S01,1hr,5,,,,,,,,,
+NaOH-5A-0min,NaOH-5A-S01,0min,0,3.7,0,6.8472,6.8472,100.00,0.00,,,初始原液清澈無色
+NaOH-5A-10min,NaOH-5A-S01,10min,5,3.6,,,6.6895,,,,,
+NaOH-5A-20min,NaOH-5A-S01,20min,5,3.7,,,6.4984,,,,,
+NaOH-5A-30min,NaOH-5A-S01,30min,5,3.8,,,"6.4006
+",,,,,
+NaOH-5A-1hr,NaOH-5A-S01,1hr,5,3.5,,,6.3312,,,,,
 NaOH-5A-2hr,NaOH-5A-S01,2hr,5,,,,,,,,,
 NaOH-5A-3hr,NaOH-5A-S01,3hr,5,,,,,,,,,
 NaOH-5A-4hr,NaOH-5A-S01,4hr,5,,,,,,,,,
